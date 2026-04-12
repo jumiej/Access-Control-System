@@ -7,48 +7,82 @@
 // ─────────────────────────────────────────────
 
 class User {
-  // static properties shared across all instances
-  static userCount = 0;
+  // Private fields — cannot be accessed directly outside the class
+  #userId;
+  #name;
+  #role;
+  #active;
+
+  static #userCount = 0;
 
   constructor(name, role, userId) {
-    this.name = name;
-    this.role = role;
-    this.userId = userId;
-    this.active = true; // default to active when created
+    this.#name = name;
+    this.#role = this.#validateRole(role);
+    this.#userId = userId;
+    this.#active = true; // default to active when created
 
-    User.userCount++;
+    User.#userCount++;
   }
 
-  // static method
-  static getUserCount() {
-    return User.userCount;
+  #validateRole(role) {
+    const allowed = ["admin", "security", "staff", "guest"];
+    if (!allowed.includes(role)) {
+      throw new Error(
+        `invalid role "${role}". Must be one of : ${allowed.join(",")}`,
+      );
+    }
+    return role;
   }
 
-  //  simulates a user requestion acess to a door
+  // Getter //
+  get userId() {
+    return this.#userId;
+  }
+  get name() {
+    return this.#name;
+  }
+  get role() {
+    return this.#role;
+  }
+  get active() {
+    return this.#active;
+  }
+
+  // ── Setters (with internal validation hidden from caller) ──
+  set name(newName) {
+    if (!newName || newName.trim() === "") {
+      throw new Error("Name cannot be empty.");
+    }
+    this.#name = newName.trim();
+  }
+
+  set role(newRole) {
+    this.#role = this.#validateRole(newRole);
+  }
+
+  // static getteer
+  static get userCount() {
+    return User.#userCount;
+  }
+
+  // public methods
   requestAccess(door) {
-    const granted = door.unlock(this.userId, this.role);
+    const granted = door.unlock(this.#userId, this.#role);
     const status = granted ? "GRANTED" : "DENIED";
     console.log(
-      `Access ${status} for ${this.name} (${this.role}) to ${door.name}`,
+      `Access ${status} for ${this.#name} (${this.role}) to ${door.doorId} at ${door.location}`,
     );
     return granted;
   }
 
-  // update user's role
-  updateRole(newRole) {
-    const oldRole = this.role;
-    this.role = newRole;
-    console.log(`User ${this.name} role updated from ${oldRole} to ${newRole}`);
-  }
-
-  // return a summary of the user's profile
   getProfile() {
-    return `User Profile: ${this.name} (ID: ${this.userId}) - Role: ${this.role} - Status: ${this.active ? "Active" : "Inactive"}`;
+    return `User Profile: ${this.#name} (ID: ${this.#userId}) - Role: ${this.#role} - Status: ${this.#active ? "Active" : "Inactive"}`;
   }
 
   // Return weather the user is active or not
-  isActive() {
-    return this.active;
+  deactivate() {
+    this.#active = false;
+    console.log(`[Deactivated] ${this.#name}'s account has been disable`);
   }
 }
 
@@ -57,51 +91,74 @@ class User {
 // ─────────────────────────────────────────────
 
 class Door {
-  // static property, total number of doors in the system
-  static totalDoors = 0;
+  // Private fields
+  #doorId;
+  #location;
+  #isLocked;
+  #restricted;
 
-  // Roles allowed to unlock any door by default
-  static defaultAllowedRoles = ["admin", "manager", "security"];
+  static #totalDoors = 0;
+  static #ALLOWED_ROLES = ["admin", "security"];
 
   constructor(doorId, location, restricted = false) {
-    this.doorId = doorId;
-    this.location = location;
-    this.isLocked = true; // doors locked by default
-    this.restricted = restricted;
+    this.#doorId = doorId;
+    this.#location = location;
+    this.#isLocked = true; // doors locked by default
+    this.#restricted = restricted;
 
-    Door.totalDoors++;
+    Door.#totalDoors++;
   }
 
-  // static method to get total number of doors registered in the system
-  static getTotalDoors() {
-    return Door.totalDoors;
+  // ── Private method (abstraction: hides access-check logic) ──
+  #isAuthorised(role) {
+    if (!this.#restricted) return true;
+    return Door.#ALLOWED_ROLES.includes(role);
   }
 
-  // Method to attempt unlocking the door based on user role and door restrictions
-  unlock(userId, userRole) {
-    if (this.restricted && !Door.defaultAllowedRoles.includes(userRole)) {
-      return false; // Access denied - restricted area
-    }
-    this.isLocked = false; // Door unlocked
-    return true; // Access granted
+  // Getter
+  get doorId() {
+    return this.#doorId;
+  }
+  get location() {
+    return this.#location;
+  }
+  get isLocked() {
+    return this.#isLocked;
   }
 
-  // Method to lock the door
-  lock() {
-    this.isLocked = true;
-    console.log(`Door ${this.doorId} at ${this.location} is now locked.`);
-  }
-
-  // Return a readable status of the door
-  getStatus() {
-    const lock = this.isLocked ? "Locked" : "Unlocked";
-    const restricted = this.restricted ? "Restricted" : "Public";
-    return `Door ${this.doorId} at ${this.location} is ${lock} and ${restricted}.`;
-  }
-
-  // Return weather the door is restricted or not
-  isRestricted() {
+  get restricted() {
     return this.restricted;
+  }
+
+  // Setter
+  set location(newLocation) {
+    if (!newLocation || newLocation.trim() === "") {
+      throw new Error("Location cannot be empty.");
+    }
+    this.#location = newLocation.trim();
+  }
+
+  // static getter //
+  static get totalDoors() {
+    return Door.#totalDoors;
+  }
+
+  // public methods //
+  unlock(userId, role) {
+    if (!this.#isAuthorised(role)) return false;
+    this.#isLocked = false;
+    return true;
+  }
+
+  lock() {
+    this.#isLocked = true;
+    console.log(`[locked] ${this.#location} (${this.#doorId})`);
+  }
+
+  getStatus() {
+    const lockState = this.#isLocked ? "Locked" : "Unlocked";
+    const accessType = this.#restricted ? "Restricted" : "Public";
+    return `Door(${this.#doorId} | ${this.#location} | ${lockState} | ${accessType})`;
   }
 }
 
@@ -110,47 +167,56 @@ class Door {
 // ─────────────────────────────────────────────
 
 class AccessLog {
-  static logCount = 0;
+  #entries;
+
+  static #logCount = 0;
 
   constructor() {
-    this.entries = [];
+    this.#entries = [];
   }
 
-  //  Log an access attempt
-  logAttempt(user, door, granted) {
-    AccessLog.logCount++;
+  // ── Private method (abstraction: hides entry-building logic) ──
+  #buildEntry(user, door, granted) {
+    AccessLog.#logCount++;
 
-    const entry = {
-      logId: `Log-${AccessLog.logCount}.padStart(3, '0')`,
-      timestamp: new Date(),
+    return {
+      logId: `Log-${AccessLog.#logCount}.padStart(3, '0')`,
+      timestamp: new Date().toLocaleTimeString(),
       userId: user.userId,
       doorId: door.doorId,
       userName: user.name,
       doorLocation: door.location,
       result: granted ? "GRANTED" : "DENIED",
     };
-
-    this.entries.push(entry);
   }
 
-  // Retrieve all log entries to the console
-  getLogs() {
-    console.log("Access Log Entries:");
-    if (this.entries.length === 0) {
-      console.log("No entries recorded.");
+  // Getter //
+  get totalEntries() {
+    return this.#entries.length;
+  }
+
+  //  static getter//
+  static get logCount() {
+    return AccessLog.#logCount;
+  }
+
+  // Public methods //
+  logAttempt(user, door, granted) {
+    const entry = this.#buildEntry(user, door, granted);
+    this.#entries.push(entry);
+  }
+
+  printLog() {
+    console.log("\n  ──────────── ACCESS LOG ────────────");
+    if (this.#entries.length === 0) {
+      console.log("No entries recorded");
     } else {
-      this.entries.forEach((entry) => {
+      this.#entries.forEach((e) => {
         console.log(
-          `- ${entry.timestamp}: ${entry.userName} (${entry.userId}) - ${entry.doorLocation} (${entry.doorId}): ${entry.result}`,
+          `[${e.logId} ${e.timestamp} | ${e.userName} -> ${e.location} | ${e.result} ]`,
         );
       });
     }
-    console.log(`Total log entries: ${this.entries.length}`);
-  }
-
-  // Static method to get total number of log entries
-  static getTotalLogs() {
-    return AccessLog.logCount;
   }
 }
 
@@ -162,25 +228,46 @@ console.log("=== Access Control System Simulation ===");
 
 // create users
 const alice = new User("Alice", "admin", "U001");
-const bob = new User("Bob", "employee", "U002");
-const charlie = new User("Charlie", "manager", "U003");
+const bob = new User("Bob", "security", "U002");
+const charlie = new User("Charlie", "staff", "U003");
+const Okoro = new User("Okoro", "guest", "U004");
 
-console.log("===== Registered Users =====");
+console.log("===== Users via getters =====");
 console.log(alice.getProfile());
 console.log(bob.getProfile());
 console.log(charlie.getProfile());
-console.log(`Total users registered: ${User.getUserCount()}`);
+console.log(Okoro.getProfile());
+
+console.log(`Total users registered: ${User.userCount}`);
+
+// ── Demonstrate setter with validation ──
+console.log("--- Setter: update Bob's name ---");
+bob.name = "Robert Okafor";
+console.log(`Updated name: ${bob.name}\n`);
+
+// ── Demonstrate role setter with validation ──
+console.log("--- Setter: update Bob's role ---");
+bob.role = "security";
+console.log(`Updated role: ${bob.role}\n`);
+
+// ── Attempt invalid role (abstraction hides the validation) ──
+console.log("--- Invalid role attempt ---");
+try {
+  Okoro.role = "superuser";
+} catch (e) {
+  console.log(`  Error caught: ${e.message}\n`);
+}
 
 // create doors
 const mainEntrance = new Door("D001", "Main Entrance", false); // public door
 const serverRoom = new Door("D002", "Server Room", true); // restricted door
 const conferenceRoom = new Door("D003", "Conference Room", false); // public door
 
-console.log("\n===== Registered Doors =====");
+console.log("--- Doors (via getters) ---");
 console.log(mainEntrance.getStatus());
 console.log(serverRoom.getStatus());
 console.log(conferenceRoom.getStatus());
-console.log(`Total doors registered: ${Door.getTotalDoors()}`);
+console.log(`Total doors: ${Door.totalDoors}\n`);
 
 // create access log
 const accessLog = new AccessLog();
@@ -204,24 +291,18 @@ accessLog.logAttempt(charlie, mainEntrance, granted);
 granted = bob.requestAccess(conferenceRoom);
 accessLog.logAttempt(bob, conferenceRoom, granted);
 
-// update a role //
-console.log("\n=== Role Update ===");
-bob.updateRole("security");
-granted = bob.requestAccess(serverRoom);
-accessLog.logAttempt(bob, serverRoom, granted);
+// ── Deactivate a user ──
+console.log("\n--- Deactivate Okoro ---");
+Okoro.deactivate();
+console.log(`Okoro active status: ${Okoro.active}`);
 
-// lock a door //
-console.log("\n=== Locking a Door ===");
-mainEntrance.lock();
+// ── Lock doors ──
+console.log("\n--- Lock doors ---");
 serverRoom.lock();
+mainEntrance.lock();
 
-// print the full access log
-accessLog.getLogs();
-
-// summary of the system status
-console.log("\n=== System Summary ===");
-console.log(`Total user registered : ${User.getUserCount()}`);
-console.log(`Total doors registered : ${Door.getTotalDoors()}`);
-console.log(`Total access log entries : ${AccessLog.getTotalLogs()}`);
-console.log(`Alice's profile: ${alice.getProfile()}`);
-console.log(`server room restricted status: ${serverRoom.isRestricted()}`);
+// ── Summary ──
+console.log("--- Summary ---");
+console.log(`Total users registered : ${User.userCount}`);
+console.log(`Total doors registered : ${Door.totalDoors}`);
+console.log(`Total log entries      : ${AccessLog.logCount}`);
